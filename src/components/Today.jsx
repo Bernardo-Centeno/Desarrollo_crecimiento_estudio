@@ -8,7 +8,7 @@ const KIND_LABEL = {
   repaso_general: 'Repaso general',
 };
 
-export default function Today({ subjects, planItems, onToggle, onRegenerate, warnings }) {
+export default function Today({ subjects, exams, planItems, onToggle, onRegenerate, warnings }) {
   const today = todayISO();
 
   const subjectById = useMemo(() => Object.fromEntries(subjects.map((s) => [s.id, s])), [subjects]);
@@ -21,8 +21,8 @@ export default function Today({ subjects, planItems, onToggle, onRegenerate, war
   const progress = totalMin > 0 ? Math.round((doneMin / totalMin) * 100) : 0;
 
   // Próximos exámenes
-  const upcoming = subjects
-    .filter((s) => diffDays(today, s.exam_date) >= 0)
+  const upcoming = exams
+    .filter((e) => subjectById[e.subject_id] && diffDays(today, e.exam_date) >= 0)
     .sort((a, b) => a.exam_date.localeCompare(b.exam_date))
     .slice(0, 3);
 
@@ -48,11 +48,13 @@ export default function Today({ subjects, planItems, onToggle, onRegenerate, war
 
       {upcoming.length > 0 && (
         <div className="exam-strip">
-          {upcoming.map((s) => {
-            const d = diffDays(today, s.exam_date);
+          {upcoming.map((e) => {
+            const d = diffDays(today, e.exam_date);
             return (
-              <div className="exam-pill" key={s.id}>
-                <strong>{s.name}</strong>
+              <div className="exam-pill" key={e.id}>
+                <strong>
+                  {subjectById[e.subject_id].name} · {e.name}
+                </strong>
                 <span>{d === 0 ? 'es hoy' : d === 1 ? 'mañana' : `en ${d} días`}</span>
               </div>
             );

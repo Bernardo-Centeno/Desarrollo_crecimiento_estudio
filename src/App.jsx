@@ -7,8 +7,10 @@ import Plan from './components/Plan.jsx';
 import Subjects from './components/Subjects.jsx';
 import Settings from './components/Settings.jsx';
 import {
+  addExam,
   addSubject,
   addTopics,
+  deleteExam,
   deleteSubject,
   deleteTopic,
   loadAll,
@@ -16,7 +18,7 @@ import {
   regeneratePlan,
   saveProfile,
   setPlanItemDone,
-  updateSubjectExam,
+  updateExam,
 } from './lib/data.js';
 
 const TABS = [
@@ -25,6 +27,8 @@ const TABS = [
   { id: 'materias', label: 'Materias', icon: '📖' },
   { id: 'ajustes', label: 'Ajustes', icon: '⚙️' },
 ];
+
+const EMPTY_DATA = { subjects: [], topics: [], exams: [], examTopics: [], planItems: [] };
 
 export default function App() {
   if (!hasSupabaseConfig) return <MissingConfig />;
@@ -69,7 +73,7 @@ function Main({ user }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [profile, setProfile] = useState(null);
-  const [data, setData] = useState({ subjects: [], topics: [], planItems: [] });
+  const [data, setData] = useState(EMPTY_DATA);
   const [tab, setTab] = useState('hoy');
   const [warnings, setWarnings] = useState([]);
 
@@ -98,11 +102,17 @@ function Main({ user }) {
     };
   }, [user.id, refresh]);
 
-  // Reorganiza el plan con los datos más recientes
-  async function rebuild(settings, subjects, topics) {
-    const { warnings: w } = await regeneratePlan(user.id, subjects, topics, settings);
+  // Reorganiza el plan con los datos más recientes (all = resultado de refresh)
+  async function rebuild(settings, all) {
+    const { warnings: w } = await regeneratePlan(user.id, all, settings);
     setWarnings(w);
     await refresh();
+  }
+
+  // Después de cualquier cambio en materias, temas o exámenes: recargar y replanificar
+  async function reload(settings = profile) {
+    const all = await refresh();
+    await rebuild(settings, all);
   }
 
   async function handleOnboardingFinish({ studying, weekly_hours, study_days, subjects }) {
@@ -110,9 +120,8 @@ function Main({ user }) {
       await addSubject(user.id, s);
     }
     const saved = await saveProfile(user.id, { studying, weekly_hours, study_days, onboarded: true });
-    const all = await refresh();
     setProfile(saved);
-    await rebuild(saved, all.subjects, all.topics);
+    await reload(saved);
   }
 
   async function handleToggle(item) {
@@ -136,43 +145,48 @@ function Main({ user }) {
 
   async function handleAddSubject(values) {
     await addSubject(user.id, values);
-    const all = await refresh();
-    await rebuild(profile, all.subjects, all.topics);
+    await reload();
   }
 
   async function handleDeleteSubject(subject) {
     await deleteSubject(subject.id);
-    const all = await refresh();
-    await rebuild(profile, all.subjects, all.topics);
+    await reload();
   }
 
-  async function handleAddTopics(subject, startPosition, names) {
-    await addTopics(user.id, subject.id, startPosition, names);
-    const all = await refresh();
-    await rebuild(profile, all.subjects, all.topics);
+  async function handleAddTopics(subject, startPosition, names, examIds) {
+    await addTopics(user.id, subject.id, startPosition, names, examIds);
+    await reload();
   }
 
   async function handleDeleteTopic(topic) {
     await deleteTopic(topic.id);
-    const all = await refresh();
-    await rebuild(profile, all.subjects, all.topics);
+    await reload();
   }
 
-  async function handleChangeExam(subject, examDate) {
-    await updateSubjectExam(subject.id, examDate);
-    const all = await refresh();
-    await rebuild(profile, all.subjects, all.topics);
+  async function handleAddExam(subject, values) {
+    await addExam(user.id, subject.id, values);
+    await reload();
+  }
+
+  async function handleUpdateExam(exam, values) {
+    await updateExam(user.id, exam.id, values);
+    await reload();
+  }
+
+  async function handleDeleteExam(exam) {
+    await deleteExam(exam.id);
+    await reload();
   }
 
   async function handleSaveSettings(values) {
     const saved = await saveProfile(user.id, { ...values, onboarded: true });
     setProfile(saved);
-    await rebuild(saved, data.subjects, data.topics);
+    await reload(saved);
   }
 
   async function handleRegenerate() {
     try {
-      await rebuild(profile, data.subjects, data.topics);
+      await reload();
     } catch (err) {
       setError(friendlyError(err));
     }
@@ -211,6 +225,7 @@ function Main({ user }) {
         {tab === 'hoy' && (
           <Today
             subjects={data.subjects}
+            exams={data.exams}
             planItems={data.planItems}
             onToggle={handleToggle}
             onRegenerate={handleRegenerate}
@@ -222,11 +237,15 @@ function Main({ user }) {
           <Subjects
             subjects={data.subjects}
             topics={data.topics}
+            exams={data.exams}
+            examTopics={data.examTopics}
             onAddSubject={handleAddSubject}
             onDeleteSubject={handleDeleteSubject}
             onAddTopics={handleAddTopics}
             onDeleteTopic={handleDeleteTopic}
-            onChangeExam={handleChangeExam}
+            onAddExam={handleAddExam}
+            onUpdateExam={handleUpdateExam}
+            onDeleteExam={handleDeleteExam}
           />
         )}
         {tab === 'ajustes' && (
@@ -253,8 +272,12 @@ function Main({ user }) {
 
 function friendlyError(err) {
   const msg = err?.message ?? String(err);
-  if (msg.includes('relation') && msg.includes('does not exist')) {
-    return 'Faltan crear las tablas en Supabase. Ejecutá el archivo supabase.sql en el SQL Editor.';
+  if (
+    (msg.includes('relation') && msg.includes('does not exist')) ||
+    msg.includes('schema cache') ||
+    msg.includes('Could not find the')
+  ) {
+    return 'Faltan crear o actualizar las tablas en Supabase. Ejecutá el archivo supabase.sql en el SQL Editor.';
   }
   return msg;
 }

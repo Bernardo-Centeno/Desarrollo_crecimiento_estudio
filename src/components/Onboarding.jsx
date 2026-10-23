@@ -6,7 +6,7 @@ import { formatShort } from '../lib/dates.js';
 
 /**
  * Asistente inicial en 3 pasos:
- * 1) qué estudia  2) disponibilidad  3) materias
+ * 1) qué estudia  2) disponibilidad  3) materias y exámenes
  * onFinish recibe { studying, weekly_hours, study_days, subjects: [...] }
  */
 export default function Onboarding({ onFinish }) {
@@ -57,7 +57,7 @@ export default function Onboarding({ onFinish }) {
               />
             </label>
             <p className="muted small">
-              Después cargás tus materias o temas y yo les asigno técnicas de estudio según el tipo de contenido.
+              Después cargás tus materias, temas y exámenes, y yo les asigno técnicas de estudio según el tipo de contenido.
             </p>
           </div>
           <button className="btn primary" disabled={!studying.trim()} onClick={() => setStep(2)}>
@@ -101,26 +101,32 @@ export default function Onboarding({ onFinish }) {
       {step === 3 && (
         <div className="stack">
           <h1>Tus materias y exámenes</h1>
-          <p className="muted">Cargá una por una. Con una alcanza para arrancar y después sumás más.</p>
+          <p className="muted">
+            Cargá una por una, con todos sus exámenes (parciales, final). Con una alcanza para arrancar y después sumás más.
+          </p>
 
           {subjects.length > 0 && (
             <div className="stack">
-              {subjects.map((s, i) => (
-                <div className="card row between" key={i}>
-                  <div>
-                    <strong>{s.name}</strong>
-                    <div className="muted small">
-                      {typeLabel(s.type)} · examen {formatShort(s.exam_date)} · {s.topicNames.length} temas
+              {subjects.map((s, i) => {
+                const nextDate = s.exams.map((e) => e.exam_date).sort()[0];
+                return (
+                  <div className="card row between" key={i}>
+                    <div>
+                      <strong>{s.name}</strong>
+                      <div className="muted small">
+                        {typeLabel(s.type)} · {s.topicNames.length} temas · {s.exams.length}{' '}
+                        {s.exams.length === 1 ? 'examen' : 'exámenes'} (primero: {formatShort(nextDate)})
+                      </div>
                     </div>
+                    <button
+                      className="btn small danger"
+                      onClick={() => setSubjects(subjects.filter((_, j) => j !== i))}
+                    >
+                      Quitar
+                    </button>
                   </div>
-                  <button
-                    className="btn small danger"
-                    onClick={() => setSubjects(subjects.filter((_, j) => j !== i))}
-                  >
-                    Quitar
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 

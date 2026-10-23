@@ -18,5 +18,3 @@
     "vite": "^5.4.0"
   }
 }
-VITE_SUPABASE_URL=https://TU-CODIGO.supabase.co
-VITE_SUPABASE_ANON_KEY=tu_clave_publica
